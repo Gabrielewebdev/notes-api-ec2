@@ -1,0 +1,28 @@
+locals {
+  project_name = "notes-api-ec2"
+}
+
+module "network" {
+  source = "./modules/network"
+
+  project_name = local.project_name
+}
+
+module "compute" {
+  source = "./modules/compute"
+
+  project_name          = local.project_name
+  vpc_id                = module.network.vpc_id
+  subnet_ids            = module.network.public_subnet_ids
+  alb_security_group_id = module.network.alb_security_group_id
+  app_security_group_id = module.network.app_security_group_id
+
+  certificate_arn = aws_acm_certificate_validation.api.certificate_arn
+  table_name      = aws_dynamodb_table.notes.name
+  table_arn       = aws_dynamodb_table.notes.arn
+
+  image_uri      = "726862573245.dkr.ecr.us-east-1.amazonaws.com/notes-api-ec2:c2c240448052660d7ee47241986a6227dae290cf"
+  repository_arn = "arn:aws:ecr:us-east-1:726862573245:repository/notes-api-ec2"
+
+  depends_on = [module.network]
+}
