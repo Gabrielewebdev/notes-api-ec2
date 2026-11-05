@@ -1,13 +1,37 @@
+import os
 from dataclasses import asdict
 
+import boto3
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from notes.dynamodb_repository import DynamoDBNoteRepository
 from notes.service import InMemoryNoteRepository, NotesService
 
+
+def build_service():
+    backend = os.getenv("NOTES_BACKEND", "memory")
+
+    if backend == "memory":
+        return NotesService(InMemoryNoteRepository())
+
+    if backend == "dynamodb":
+        table_name = os.getenv("NOTES_TABLE_NAME", "").strip()
+        if not table_name:
+            raise RuntimeError("NOTES_TABLE_NAME è obbligatorio")
+
+        region = os.getenv("AWS_REGION", "us-east-1")
+        dynamodb = boto3.resource("dynamodb", region_name=region)
+        return NotesService(
+            DynamoDBNoteRepository(dynamodb.Table(table_name))
+        )
+
+    raise RuntimeError(f"NOTES_BACKEND non valido: {backend}")
+
+
 app = FastAPI(title="Notes API")
-service = NotesService(InMemoryNoteRepository())
+service = build_service()
 
 
 class NoteInput(BaseModel):
