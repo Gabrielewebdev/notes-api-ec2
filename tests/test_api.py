@@ -83,3 +83,29 @@ def test_pagination(client):
 
     ids = [note["id"] for note in first["notes"] + second["notes"]]
     assert len(set(ids)) == 3
+
+
+def test_api_key_required(client, monkeypatch):
+    monkeypatch.setenv("NOTES_API_KEY", "test-secret")
+    assert client.get("/notes").status_code == 401
+    assert client.get(
+        "/notes", headers={"X-API-Key": "wrong"}
+    ).status_code == 401
+
+
+def test_api_key_accepted(client, monkeypatch):
+    monkeypatch.setenv("NOTES_API_KEY", "test-secret")
+    assert client.get(
+        "/notes", headers={"X-API-Key": "test-secret"}
+    ).status_code == 200
+
+
+def test_health_without_api_key(client, monkeypatch):
+    monkeypatch.setenv("NOTES_API_KEY", "test-secret")
+    assert client.get("/health").status_code == 200
+
+
+def test_missing_server_key_blocks_dynamodb(client, monkeypatch):
+    monkeypatch.delenv("NOTES_API_KEY", raising=False)
+    monkeypatch.setenv("NOTES_BACKEND", "dynamodb")
+    assert client.get("/notes").status_code == 503

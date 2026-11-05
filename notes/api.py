@@ -2,7 +2,7 @@ import os
 from dataclasses import asdict
 
 import boto3
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -30,7 +30,9 @@ def build_service():
     raise RuntimeError(f"NOTES_BACKEND non valido: {backend}")
 
 
-app = FastAPI(title="Notes API")
+from notes.auth import require_api_key
+
+app = FastAPI(title="Notes API", dependencies=[Depends(require_api_key)])
 service = build_service()
 
 

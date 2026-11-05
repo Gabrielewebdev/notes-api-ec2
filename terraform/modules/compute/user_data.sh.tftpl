@@ -23,6 +23,20 @@ aws ecr get-login-password --region us-east-1 |
   docker login --username AWS --password-stdin 726862573245.dkr.ecr.us-east-1.amazonaws.com
 
 docker pull '${image_uri}'
+
+API_KEY=$(aws ssm get-parameter \
+  --name /notes-api-ec2/api-key \
+  --with-decryption \
+  --region us-east-1 \
+  --query Parameter.Value \
+  --output text)
+
+test -n "$API_KEY"
+umask 077
+grep -v '^NOTES_API_KEY=' /etc/notes-api/environment > /etc/notes-api/environment.new
+printf 'NOTES_API_KEY=%s\n' "$API_KEY" >> /etc/notes-api/environment.new
+mv /etc/notes-api/environment.new /etc/notes-api/environment
+unset API_KEY
 docker logout 726862573245.dkr.ecr.us-east-1.amazonaws.com
 docker rm -f notes-api || true
 

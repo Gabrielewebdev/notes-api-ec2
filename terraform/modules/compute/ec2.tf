@@ -92,6 +92,7 @@ resource "aws_autoscaling_group" "api" {
   depends_on = [
     aws_lb_listener.https,
     aws_iam_role_policy.application,
+    aws_iam_role_policy.configuration,
     aws_iam_role_policy.logs,
     aws_iam_role_policy_attachment.ssm
   ]
