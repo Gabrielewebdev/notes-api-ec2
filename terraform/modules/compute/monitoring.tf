@@ -9,6 +9,8 @@ resource "aws_cloudwatch_metric_alarm" "unhealthy_targets" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     LoadBalancer = aws_lb.this.arn_suffix
@@ -27,6 +29,8 @@ resource "aws_cloudwatch_metric_alarm" "api_errors" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 5
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     LoadBalancer = aws_lb.this.arn_suffix
