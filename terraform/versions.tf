@@ -14,13 +14,12 @@ terraform {
     region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
-    profile      = "portfolio"
+
   }
 }
 
 provider "aws" {
-  region  = "us-east-1"
-  profile = "portfolio"
+  region = "us-east-1"
 
   allowed_account_ids = ["726862573245"]
 
