@@ -1,0 +1,43 @@
+name: AWS access check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: notes-api-ec2-deployment
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+      TF_IN_AUTOMATION: "true"
+      AWS_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.17.1'
+
+      - name: Verify identity
+        run: aws sts get-caller-identity
+
+      - name: Initialize Terraform
+        run: terraform -chdir=terraform init -input=false -lockfile=readonly
+
+      - name: Check infrastructure access
+        run: terraform -chdir=terraform plan -input=false
