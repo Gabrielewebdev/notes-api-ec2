@@ -84,38 +84,85 @@ jobs:
       - name: Apply deployment
         run: terraform -chdir=terraform apply -input=false deployment.tfplan
 
-      - name: Wait for instance refresh
+      - name: Wait for healthy deployment
         shell: bash
         run: |
           set -euo pipefail
-          REFRESH_ID=$(aws autoscaling describe-instance-refreshes \
-            --auto-scaling-group-name notes-api-ec2 \
-            --query 'InstanceRefreshes[0].InstanceRefreshId' \
-            --output text)
 
-          test "$REFRESH_ID" != "None"
+          python - <<'PYTHON'
+          import json
+          import subprocess
+          import time
 
-          for attempt in $(seq 1 90); do
-            STATUS=$(aws autoscaling describe-instance-refreshes \
-              --auto-scaling-group-name notes-api-ec2 \
-              --instance-refresh-ids "$REFRESH_ID" \
-              --query 'InstanceRefreshes[0].Status' \
-              --output text)
+          def aws(*args):
+              result = subprocess.check_output(
+                  ["aws", *args, "--output", "json"], text=True
+              )
+              return json.loads(result)
 
-            echo "Instance refresh: $STATUS"
+          for attempt in range(90):
+              group = aws(
+                  "autoscaling", "describe-auto-scaling-groups",
+                  "--auto-scaling-group-names", "notes-api-ec2"
+              )["AutoScalingGroups"][0]
 
-            case "$STATUS" in
-              Successful) exit 0 ;;
-              Failed|Cancelled|RollbackFailed|RollbackSuccessful)
-                exit 1
-                ;;
-            esac
+              refreshes = aws(
+                  "autoscaling", "describe-instance-refreshes",
+                  "--auto-scaling-group-name", "notes-api-ec2"
+              )["InstanceRefreshes"]
 
-            sleep 20
-          done
+              status = refreshes[0]["Status"] if refreshes else "None"
+              print(f"Refresh: {status}", flush=True)
 
-          echo "Timeout waiting for instance refresh"
-          exit 1
+              if status in {
+                  "Failed", "Cancelled",
+                  "RollbackFailed", "RollbackSuccessful"
+              }:
+                  raise SystemExit("Instance refresh failed")
+
+              instances = group["Instances"]
+              desired = group["DesiredCapacity"]
+              ready = (
+                  desired >= 2
+                  and len(instances) == desired
+                  and all(
+                      i["LifecycleState"] == "InService"
+                      and i["HealthStatus"] == "Healthy"
+                      and i.get("LaunchTemplate", {}).get("Version")
+                          == group["LaunchTemplate"]["Version"]
+                      for i in instances
+                  )
+                  and status in {"None", "Successful"}
+              )
+
+              if ready:
+                  expected_ids = {i["InstanceId"] for i in instances}
+                  for target_group in group["TargetGroupARNs"]:
+                      targets = aws(
+                          "elbv2", "describe-target-health",
+                          "--target-group-arn", target_group
+                      )["TargetHealthDescriptions"]
+                      healthy_ids = {
+                          t["Target"]["Id"]
+                          for t in targets
+                          if t["TargetHealth"]["State"] == "healthy"
+                      }
+                      if not expected_ids.issubset(healthy_ids):
+                          ready = False
+
+              print(
+                  f"Attempt {attempt + 1}: "
+                  f"instances={len(instances)}, desired={desired}, ready={ready}",
+                  flush=True,
+              )
+
+              if ready:
+                  raise SystemExit(0)
+
+              time.sleep(20)
+
+          raise SystemExit("Timeout waiting for healthy deployment")
+          PYTHON
 
       - name: Verify HTTPS
         run: |
