@@ -2,6 +2,10 @@ name: Deploy
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,6 +17,13 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        vars.AUTO_DEPLOY_ENABLED == 'true'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -25,6 +36,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -54,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          TAG="$(git rev-parse HEAD)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$TAG"
 
           docker build -t "$IMAGE" .
